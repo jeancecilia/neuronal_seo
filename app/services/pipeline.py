@@ -143,6 +143,13 @@ class Pipeline:
                 results["steps"]["embeddings"] = emb_result
 
                 # ------------------------------------------------------------------
+                # Step 8.5: Clean old analysis data (prevents duplicates on re-run)
+                # ------------------------------------------------------------------
+                logger.info(f"Step 8.5: Cleaning old analysis data for {project.domain}")
+                cleaned = await self._clean_analysis_data(project.id, db)
+                results["steps"]["cleanup"] = cleaned
+
+                # ------------------------------------------------------------------
                 # Step 9: Cluster keywords
                 # ------------------------------------------------------------------
                 logger.info(f"Step 9: Clustering keywords for {project.domain}")
@@ -257,6 +264,38 @@ class Pipeline:
             page.page_type = classification.get("page_type", page.page_type)
 
         await db.flush()
+
+    async def _clean_analysis_data(self, project_id: str, db) -> dict:
+        """
+        Delete old analysis results before re-running.
+        Cleans clusters, gaps, link suggestions, and tasks.
+        Keeps keywords, pages, embeddings, and reports.
+        """
+        from app.models import KeywordCluster, ContentGap, InternalLinkSuggestion, SeoTask, Keyword
+        from sqlalchemy import delete, update
+
+        # Unlink keywords from clusters
+        await db.execute(
+            update(Keyword)
+            .where(Keyword.project_id == project_id)
+            .values(cluster_id=None)
+        )
+
+        # Delete old analysis data
+        counts = {}
+        for model, name in [
+            (ContentGap, "content_gaps"),
+            (InternalLinkSuggestion, "link_suggestions"),
+            (SeoTask, "seo_tasks"),
+            (KeywordCluster, "keyword_clusters"),
+        ]:
+            result = await db.execute(
+                delete(model).where(model.project_id == project_id)
+            )
+            counts[name] = result.rowcount
+
+        await db.flush()
+        return counts
 
     async def _extract_entities(self, project: Project, db: AsyncSession) -> None:
         """Extract entities from own pages for topic map building."""
