@@ -300,6 +300,76 @@ def schedule_run_now():
 
 
 @app.command()
+def bootstrap_default_projects():
+    """
+    Create all three default projects with their seed keywords.
+    Reads from seeds/*.yml files. Safe to run multiple times (skips existing).
+    """
+    import yaml
+
+    seed_files = [
+        "seeds/appagentur-koeln.yml",
+        "seeds/hypnosetherapie-koeln.yml",
+        "seeds/udonthanilawyer-en.yml",
+    ]
+
+    async def _bootstrap():
+        for seed_file in seed_files:
+            if not os.path.exists(seed_file):
+                console.print(f"[yellow]⚠[/yellow] {seed_file} not found, skipping")
+                continue
+
+            with open(seed_file, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+
+            project_data = data.get("project", {})
+            keywords = data.get("keywords", [])
+            domain = project_data.get("domain", "unknown")
+
+            async with async_session_factory() as db:
+                from sqlalchemy import select as sa_select
+                result = await db.execute(
+                    sa_select(Project).where(Project.domain == domain)
+                )
+                existing = result.scalar_one_or_none()
+
+                if existing:
+                    console.print(f"[yellow]⚠[/yellow] {domain} already exists, skipping")
+                    continue
+
+                project = Project(
+                    domain=domain,
+                    target_country=project_data.get("target_country", "DE"),
+                    target_language=project_data.get("target_language", "de"),
+                    target_cities=project_data.get("target_cities", []),
+                    services=project_data.get("services", []),
+                    competitors=project_data.get("competitors", []),
+                )
+                db.add(project)
+                await db.flush()
+
+                from app.models import Keyword
+                added = 0
+                for kw_text in keywords:
+                    kw = Keyword(
+                        project_id=project.id,
+                        keyword=kw_text.strip(),
+                        language=project.target_language,
+                        country=project.target_country,
+                        source="bootstrap",
+                    )
+                    db.add(kw)
+                    added += 1
+
+                await db.commit()
+                console.print(f"[green]✓[/green] {domain}: {added} keywords ({project.id[:8]}...)")
+
+        console.print("\n[bold]Done![/bold] Run: [cyan]python cli.py run-pipeline --project-id <id>[/cyan]")
+
+    asyncio.run(_bootstrap())
+
+
+@app.command()
 def import_seed(
     seed_file: str = typer.Option(..., help="Path to YAML seed file"),
 ):

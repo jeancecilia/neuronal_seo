@@ -239,6 +239,10 @@ reports               - Generated reports
 
 ```
 neuronal_seo/
+├── seeds/              # Project seed configurations (YAML)
+│   ├── appagentur-koeln.yml
+│   ├── hypnosetherapie-koeln.yml
+│   └── udonthanilawyer-en.yml
 ├── app/
 │   ├── api/            # FastAPI route handlers (7 modules)
 │   ├── core/           # Config, database engine
