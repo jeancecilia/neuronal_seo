@@ -47,6 +47,8 @@ services:
       - ./app/templates:/app/app/templates
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
+      - ./cli.py:/app/cli.py
+      - ./seeds:/app/seeds
     env_file:
       - .env
     environment:

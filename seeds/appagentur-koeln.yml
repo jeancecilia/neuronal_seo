@@ -1,0 +1,65 @@
+# Appagentur Köln — SEO Seed Configuration
+# German software agency in Cologne
+
+project:
+  domain: appagentur-koeln.com
+  target_country: DE
+  target_language: de
+  target_cities:
+    - Köln
+    - Bonn
+    - Düsseldorf
+    - Leverkusen
+    - Hürth
+    - Frechen
+  services:
+    - App Entwicklung
+    - App Agentur
+    - Mobile App Entwicklung
+    - Flutter Entwicklung
+    - React Native Entwicklung
+    - iOS App Entwicklung
+    - Android App Entwicklung
+    - MVP Entwicklung
+    - Web App Entwicklung
+    - Kundenportal Entwicklung
+    - Backend Entwicklung
+    - Admin Dashboard Entwicklung
+    - App Store Veröffentlichung
+    - Google Play Veröffentlichung
+    - KI Automatisierung
+    - WordPress Entwicklung
+    - SEO Köln
+  competitors:
+    - app-agentur.com
+    - appentwickler.de
+    - app-entwickler-verzeichnis.de
+
+keywords:
+  - app entwicklung köln
+  - app agentur köln
+  - app entwickeln lassen köln
+  - flutter entwickler köln
+  - mvp entwicklung köln
+  - mobile app entwicklung köln
+  - ios app entwicklung köln
+  - android app entwicklung köln
+  - app kosten köln
+  - app programmieren lassen
+  - app store veröffentlichung
+  - kundenportal entwickeln lassen
+  - react native entwickler köln
+  - web app entwicklung köln
+  - backend entwickler köln
+  - ki automatisierung köln
+  - wordpress plugin entwicklung köln
+  - seo agentur köln
+  - app veröffentlichen lassen
+  - individuelle app entwicklung
+  - cross platform app entwicklung
+  - flutter vs react native
+  - app design köln
+  - app beratung köln
+  - app konzept erstellen lassen
+  - app maintenance köln
+  - beste app agentur köln

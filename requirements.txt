@@ -41,6 +41,7 @@ openai>=1.50.0,<2.0
 tiktoken>=0.8.0,<1.0
 
 # Utilities
+pyyaml>=6.0,<7.0
 python-dotenv>=1.0.0,<2.0
 python-multipart>=0.0.19,<1.0
 python-jose[cryptography]>=3.3.0,<4.0

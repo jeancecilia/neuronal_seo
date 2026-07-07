@@ -299,5 +299,80 @@ def schedule_run_now():
     asyncio.run(_run())
 
 
+@app.command()
+def import_seed(
+    seed_file: str = typer.Option(..., help="Path to YAML seed file"),
+):
+    """
+    Import a project and its seed keywords from a YAML seed file.
+    Example: python cli.py import-seed seeds/appagentur-koeln.yml
+    """
+    import yaml
+
+    async def _import():
+        with open(seed_file, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+
+        project_data = data.get("project", {})
+        keywords = data.get("keywords", [])
+
+        if not project_data.get("domain"):
+            console.print("[red]✗[/red] Seed file must have project.domain")
+            return
+
+        async with async_session_factory() as db:
+            from sqlalchemy import select as sa_select
+            result = await db.execute(
+                sa_select(Project).where(Project.domain == project_data["domain"])
+            )
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                console.print(f"[yellow]⚠[/yellow] Project {project_data['domain']} exists (id: {existing.id})")
+                project = existing
+            else:
+                project = Project(
+                    domain=project_data["domain"],
+                    target_country=project_data.get("target_country", "DE"),
+                    target_language=project_data.get("target_language", "de"),
+                    target_cities=project_data.get("target_cities", []),
+                    services=project_data.get("services", []),
+                    competitors=project_data.get("competitors", []),
+                )
+                db.add(project)
+                await db.flush()
+                console.print(f"[green]✓[/green] Created project: {project.domain} ({project.id[:8]}...)")
+
+            from app.models import Keyword
+            added = 0
+            skipped = 0
+            for kw_text in keywords:
+                existing_kw = await db.execute(
+                    sa_select(Keyword).where(
+                        Keyword.project_id == project.id,
+                        Keyword.keyword == kw_text.strip(),
+                    )
+                )
+                if existing_kw.scalar_one_or_none():
+                    skipped += 1
+                    continue
+
+                kw = Keyword(
+                    project_id=project.id,
+                    keyword=kw_text.strip(),
+                    language=project.target_language,
+                    country=project.target_country,
+                    source="seed_import",
+                )
+                db.add(kw)
+                added += 1
+
+            await db.commit()
+            console.print(f"[green]✓[/green] {added} keywords imported ({skipped} skipped)")
+            console.print(f"Run: [cyan]python cli.py run-pipeline --project-id {project.id}[/cyan]")
+
+    asyncio.run(_import())
+
+
 if __name__ == "__main__":
     app()
