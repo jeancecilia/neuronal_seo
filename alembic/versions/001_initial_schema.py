@@ -212,7 +212,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("object_type", sa.String(50), nullable=False, index=True),
         sa.Column("object_id", sa.String(36), nullable=False, index=True),
-        sa.Column("embedding", Vector(3072), nullable=False),
+        sa.Column("embedding", Vector, nullable=False),
         sa.Column("model", sa.String(100), default="text-embedding-3-large"),
         sa.Column("text_hash", sa.String(64), nullable=True),
         sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),

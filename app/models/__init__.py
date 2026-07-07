@@ -257,7 +257,7 @@ class Embedding(Base):
     id: Mapped[str] = _uuid_pk()
     object_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # keyword, page, chunk, competitor_page
     object_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    embedding = mapped_column(Vector(3072), nullable=False)
+    embedding = mapped_column(Vector, nullable=False)
     model: Mapped[str] = mapped_column(String(100), default="text-embedding-3-large")
     text_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # SHA-256 for dedup
     created_at: Mapped[datetime] = _timestamp()

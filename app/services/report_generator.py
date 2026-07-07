@@ -1,6 +1,5 @@
 """
 Report generator that creates comprehensive Markdown/JSON SEO reports.
-Includes content briefs, internal link plans, priority roadmaps, and task lists.
 """
 
 import os
@@ -12,38 +11,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models import (
-    Project,
-    Page,
-    Keyword,
-    KeywordCluster,
-    CompetitorPage,
-    ContentGap,
-    InternalLinkSuggestion,
-    SeoTask,
-    Report,
+    Project, Page, Keyword, KeywordCluster,
+    CompetitorPage, ContentGap,
+    InternalLinkSuggestion, SeoTask, Report,
 )
 
 
 class ReportGenerator:
-    """Generates SEO reports in Markdown and JSON formats."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
         self.output_dir = settings.report_output_dir
 
-    async def generate_report(
-        self,
-        project: Project,
-        report_type: str = "full",
-    ) -> Report:
-        """Generate a complete SEO analysis report."""
-        # Collect all data
+    async def generate_report(self, project: Project, report_type: str = "full") -> Report:
         data = await self._collect_report_data(project)
-
-        # Generate markdown
         markdown = self._generate_markdown(project, data)
 
-        # Save to file
         os.makedirs(self.output_dir, exist_ok=True)
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         filename = f"seo_report_{project.domain}_{timestamp}.md"
@@ -52,7 +35,6 @@ class ReportGenerator:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(markdown)
 
-        # Save report record
         report = Report(
             project_id=project.id,
             report_type=report_type,
@@ -63,42 +45,29 @@ class ReportGenerator:
         )
         self.db.add(report)
         await self.db.flush()
-
         return report
 
     async def _collect_report_data(self, project: Project) -> dict:
-        """Collect all data needed for the report."""
-        # Pages
         result = await self.db.execute(
-            select(Page).where(
-                Page.project_id == project.id,
-                Page.is_own_site == True,
-            )
+            select(Page).where(Page.project_id == project.id, Page.is_own_site == True)
         )
         pages = result.scalars().all()
 
-        # Keywords
         result = await self.db.execute(
             select(Keyword).where(Keyword.project_id == project.id)
         )
         keywords = result.scalars().all()
 
-        # Clusters
         result = await self.db.execute(
             select(KeywordCluster).where(KeywordCluster.project_id == project.id)
         )
         clusters = result.scalars().all()
 
-        # Content gaps
         result = await self.db.execute(
-            select(ContentGap).where(
-                ContentGap.project_id == project.id,
-                ContentGap.status == "open",
-            )
+            select(ContentGap).where(ContentGap.project_id == project.id, ContentGap.status == "open")
         )
         gaps = result.scalars().all()
 
-        # Link suggestions
         result = await self.db.execute(
             select(InternalLinkSuggestion).where(
                 InternalLinkSuggestion.project_id == project.id,
@@ -107,17 +76,20 @@ class ReportGenerator:
         )
         link_suggestions = result.scalars().all()
 
-        # SEO tasks
         result = await self.db.execute(
             select(SeoTask).where(SeoTask.project_id == project.id)
         )
         tasks = result.scalars().all()
 
-        # Competitor pages
         result = await self.db.execute(
             select(CompetitorPage).where(CompetitorPage.project_id == project.id)
         )
         competitors = result.scalars().all()
+
+        # Determine crawl status
+        pages_with_content = [p for p in pages if p.content and (p.word_count or 0) > 50]
+        pages_403 = [p for p in pages if p.status_code == 403]
+        crawl_ok = len(pages_with_content) > 0
 
         return {
             "project": {
@@ -129,7 +101,11 @@ class ReportGenerator:
                 "competitors": project.competitors,
             },
             "summary": {
+                "report_type": "full_analysis" if crawl_ok else "seed_report",
+                "crawl_status": "success" if crawl_ok else ("failed_403" if pages_403 else "no_pages"),
                 "total_pages": len(pages),
+                "pages_with_content": len(pages_with_content),
+                "pages_blocked_403": len(pages_403),
                 "total_keywords": len(keywords),
                 "total_clusters": len(clusters),
                 "total_gaps": len(gaps),
@@ -139,70 +115,47 @@ class ReportGenerator:
                 "high_tasks": len([t for t in tasks if t.priority == "high"]),
             },
             "pages": [
-                {
-                    "url": p.url,
-                    "title": p.title,
-                    "word_count": p.word_count,
-                    "indexable": p.indexable,
-                    "page_type": p.page_type,
-                }
+                {"url": p.url, "title": p.title, "word_count": p.word_count,
+                 "status_code": p.status_code, "indexable": p.indexable, "page_type": p.page_type}
                 for p in pages[:30]
             ],
             "clusters": [
-                {
-                    "name": c.name,
-                    "primary_keyword": c.primary_keyword,
-                    "intent": c.intent,
-                    "action": c.action,
-                    "target_url": c.target_page_url,
-                    "size": c.cluster_size,
-                    "keywords": c.keywords_list[:10] if c.keywords_list else [],
-                }
+                {"name": c.name, "primary_keyword": c.primary_keyword, "intent": c.intent,
+                 "action": c.action, "target_url": c.target_page_url, "size": c.cluster_size,
+                 "keywords": c.keywords_list[:10] if c.keywords_list else []}
                 for c in clusters
             ],
             "content_gaps": [
-                {
-                    "type": g.gap_type,
-                    "description": g.description,
-                    "severity": g.severity,
-                    "suggested_fix": g.suggested_fix,
-                }
+                {"type": g.gap_type, "description": g.description, "severity": g.severity,
+                 "suggested_fix": g.suggested_fix}
                 for g in gaps
             ],
             "link_suggestions": [
-                {
-                    "from": ls.source_url,
-                    "to": ls.target_url,
-                    "anchor": ls.suggested_anchor,
-                    "score": ls.relevance_score,
-                }
+                {"from": ls.source_url, "to": ls.target_url, "anchor": ls.suggested_anchor,
+                 "score": ls.relevance_score}
                 for ls in link_suggestions[:20]
             ],
             "tasks_by_priority": {
-                "critical": [
-                    {"title": t.title, "category": t.category, "score": t.priority_score}
-                    for t in tasks if t.priority == "critical"
-                ],
-                "high": [
-                    {"title": t.title, "category": t.category, "score": t.priority_score}
-                    for t in tasks if t.priority == "high"
-                ],
-                "medium": [
-                    {"title": t.title, "category": t.category, "score": t.priority_score}
-                    for t in tasks if t.priority == "medium"
-                ],
+                "critical": [{"title": t.title, "category": t.category, "score": t.priority_score}
+                              for t in tasks if t.priority == "critical"],
+                "high": [{"title": t.title, "category": t.category, "score": t.priority_score}
+                          for t in tasks if t.priority == "high"],
+                "medium": [{"title": t.title, "category": t.category, "score": t.priority_score}
+                            for t in tasks if t.priority == "medium"],
             },
         }
 
     def _generate_markdown(self, project: Project, data: dict) -> str:
-        """Generate a Markdown report from collected data."""
         summary = data["summary"]
+        report_type_label = "📊 Full Analysis" if summary.get("report_type") == "full_analysis" else "🌱 Seed Report"
+        crawl_label = summary.get("crawl_status", "unknown")
 
-        md = f"""# SEO Analysis Report
+        md = f"""# SEO Analysis Report — {report_type_label}
 
 **Domain:** {project.domain}
 **Date:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
 **Country:** {project.target_country} | **Language:** {project.target_language}
+**Crawl Status:** {crawl_label}
 
 ---
 
@@ -210,7 +163,11 @@ class ReportGenerator:
 
 | Metric | Value |
 |--------|-------|
+| Report Type | {report_type_label} |
+| Crawl Status | {crawl_label} |
 | Total Pages | {summary['total_pages']} |
+| Pages With Content | {summary.get('pages_with_content', 0)} |
+| Pages Blocked (403) | {summary.get('pages_blocked_403', 0)} |
 | Total Keywords | {summary['total_keywords']} |
 | Keyword Clusters | {summary['total_clusters']} |
 | Content Gaps | {summary['total_gaps']} |
@@ -235,29 +192,15 @@ class ReportGenerator:
 
         for cluster in data.get("clusters", []):
             md += f"""### {cluster['name']}
-
 - **Primary Keyword:** {cluster['primary_keyword']}
 - **Intent:** {cluster['intent']}
 - **Action:** {cluster['action']}
 - **Target URL:** {cluster.get('target_url', 'New page needed')}
-- **Cluster Size:** {cluster['size']} keywords
+- **Size:** {cluster['size']} keywords
 - **Keywords:** {', '.join(cluster.get('keywords', [])[:10])}
 
 """
 
-            if cluster['action'] == "create_new":
-                md += f"""
-> ⚠️ **Action Required:** Create a new page for this keyword cluster.
-> Suggested URL: `{cluster.get('target_url', '/new-page')}`
-
-"""
-            elif cluster['action'] == "improve_existing":
-                md += f"""
-> ℹ️ **Action Required:** Optimize existing page `{cluster.get('target_url', '')}` for these keywords.
-
-"""
-
-        # Content Gaps
         md += """---
 
 ## Content Gaps
@@ -265,53 +208,24 @@ class ReportGenerator:
 """
 
         for gap in data.get("content_gaps", [])[:15]:
-            severity_icon = "🔴" if gap["severity"] == "high" else "🟡" if gap["severity"] == "medium" else "🟢"
-            md += f"""### {severity_icon} {gap['type']}
+            icon = "🔴" if gap["severity"] == "high" else "🟡" if gap["severity"] == "medium" else "🟢"
+            md += f"### {icon} {gap['type']}\n- {gap['description']}\n- Fix: {gap.get('suggested_fix', 'N/A')}\n\n"
 
-- **Description:** {gap['description']}
-- **Severity:** {gap['severity']}
-- **Suggested Fix:** {gap.get('suggested_fix', 'N/A')}
-
-"""
-
-        # Internal Links
         md += """---
-
-## Internal Link Suggestions
-
-| From | To | Anchor Text | Score |
-|------|----|-------------|-------|
-"""
-
-        for ls in data.get("link_suggestions", [])[:20]:
-            md += f"| {ls['from']} | {ls['to']} | {ls['anchor'][:60]} | {ls['score']:.2f} |\n"
-
-        md += """
-
----
 
 ## Priority Task Roadmap
 
 ### 🔴 Critical Tasks
 
 """
-
         for task in data.get("tasks_by_priority", {}).get("critical", []):
             md += f"- **[{task['category']}]** {task['title']} (Score: {task['score']})\n"
 
-        md += """
-
-### 🟠 High Priority Tasks
-
-"""
+        md += "\n### 🟠 High Priority Tasks\n"
         for task in data.get("tasks_by_priority", {}).get("high", []):
             md += f"- **[{task['category']}]** {task['title']} (Score: {task['score']})\n"
 
-        md += """
-
-### 🟡 Medium Priority Tasks
-
-"""
+        md += "\n### 🟡 Medium Priority Tasks\n"
         for task in data.get("tasks_by_priority", {}).get("medium", []):
             md += f"- **[{task['category']}]** {task['title']} (Score: {task['score']})\n"
 
@@ -321,13 +235,13 @@ class ReportGenerator:
 
 ## Crawled Pages ({summary['total_pages']} total)
 
-| URL | Title | Words | Indexable |
-|-----|-------|-------|-----------|
+| URL | Title | Words | Status | Indexable |
+|-----|-------|-------|--------|-----------|
 """
-
         for page in data.get("pages", [])[:30]:
-            index_icon = "✅" if page["indexable"] else "❌"
-            md += f"| {page['url'][:60]} | {(page['title'] or 'No title')[:50]} | {page['word_count'] or 0} | {index_icon} |\n"
+            icon = "✅" if page["indexable"] else "❌"
+            status = page.get("status_code", "?")
+            md += f"| {page['url'][:60]} | {(page['title'] or 'No title')[:40]} | {page['word_count'] or 0} | {status} | {icon} |\n"
 
         md += f"""
 
@@ -335,5 +249,4 @@ class ReportGenerator:
 
 *Report generated by Neuronal SEO on {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}*
 """
-
         return md
