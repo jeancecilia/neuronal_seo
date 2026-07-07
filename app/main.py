@@ -80,6 +80,7 @@ app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
 # Health & root endpoints
 # ---------------------------------------------------------------------------
 @app.get("/")
+@app.get("/dashboard")
 async def dashboard():
     """Serve the built-in dashboard."""
     dashboard_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
