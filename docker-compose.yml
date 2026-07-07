@@ -45,6 +45,8 @@ services:
       - ./tests:/app/tests
       - ./reports:/app/reports
       - ./app/templates:/app/app/templates
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
     env_file:
       - .env
     environment:
@@ -67,6 +69,8 @@ services:
       - ./app:/app/app
       - ./tests:/app/tests
       - ./reports:/app/reports
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
     env_file:
       - .env
     environment:

@@ -336,14 +336,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop FK constraints first
+    op.execute("ALTER TABLE keywords DROP CONSTRAINT IF EXISTS fk_keywords_cluster")
+    op.execute("ALTER TABLE keyword_clusters DROP CONSTRAINT IF EXISTS fk_cluster_centroid")
+
+    # Drop tables in reverse-dependency order
     op.drop_table("reports")
     op.drop_table("gsc_performance")
     op.drop_table("seo_tasks")
     op.drop_table("internal_link_suggestions")
     op.drop_table("content_gaps")
+    op.drop_table("keyword_clusters")
     op.execute("DROP INDEX IF EXISTS ix_embeddings_vector")
     op.drop_table("embeddings")
-    op.drop_table("keyword_clusters")
     op.drop_table("competitor_pages")
     op.drop_table("serp_results")
     op.drop_table("keywords")

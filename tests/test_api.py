@@ -24,12 +24,11 @@ def _unique_project(domain=None):
 
 @pytest.mark.asyncio
 async def test_root_health(async_client: AsyncClient):
-    """Test the root health endpoint."""
+    """Test the root endpoint (now serves the dashboard HTML)."""
     response = await async_client.get("/")
     assert response.status_code == 200
-    data = response.json()
-    assert data["service"] == "Neuronal SEO API"
-    assert data["status"] == "healthy"
+    assert "text/html" in response.headers.get("content-type", "")
+    assert "Neuronal SEO" in response.text
 
 
 @pytest.mark.asyncio
@@ -43,7 +42,7 @@ async def test_health_check(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_create_project(async_client: AsyncClient, sample_project_data):
+async def test_create_project(async_client: AsyncClient):
     """Test creating a project via the API."""
     data = _unique_project()
     response = await async_client.post("/api/v1/projects/", json=data)

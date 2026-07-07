@@ -300,3 +300,31 @@ uvicorn app.main:app --reload --port 8000
 rq worker --url redis://localhost:6379/0 neuronal_seo_tasks
 python cli.py --help
 ```
+
+## Running Tests
+
+All tests run inside Docker against the live database:
+
+```bash
+# Start services
+docker-compose up -d
+
+# Run migrations
+docker-compose exec api alembic upgrade head
+
+# Run all tests (24 tests: migrations, API, crawler, Playwright, reports)
+docker-compose exec api pytest tests/ -v
+
+# Run specific test file
+docker-compose exec api pytest tests/test_migrations.py -v
+
+# Run with verbose output
+docker-compose exec api pytest tests/ -v --tb=long
+```
+
+Test coverage:
+- **Migrations**: Validates `alembic upgrade head` creates all 14 tables with correct columns and foreign keys
+- **API**: 12 endpoint tests (CRUD, keywords, analysis, health)
+- **Crawler**: Static crawling, render_mode tracking, crawl policy
+- **Playwright**: Real JS-rendered page crawling + mock-based fallback tests
+- **Reports**: Report generation with Markdown output

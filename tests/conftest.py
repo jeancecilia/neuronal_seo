@@ -1,9 +1,12 @@
 """
 Shared pytest fixtures for Neuronal SEO test suite.
 Uses Docker internal hostnames (postgres, redis) when running inside containers.
+All fixtures use alembic migrations, not Base.metadata.create_all.
 """
 
 import os
+import subprocess
+import sys
 import uuid
 import asyncio
 from typing import AsyncGenerator
@@ -18,12 +21,23 @@ from sqlalchemy.ext.asyncio import (
 )
 
 # In Docker, the database is at 'postgres' hostname (Docker network)
-# Fall back to localhost for local development
 DB_HOST = os.environ.get("POSTGRES_HOST", "postgres")
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
     f"postgresql+asyncpg://neuronal_seo:neuronal_seo_pass@{DB_HOST}:5432/neuronal_seo",
 )
+SYNC_DB_URL = f"postgresql+psycopg2://neuronal_seo:neuronal_seo_pass@{DB_HOST}:5432/neuronal_seo"
+
+
+def _run_alembic_upgrade() -> None:
+    """Run alembic upgrade head using subprocess (avoids asyncio conflicts)."""
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"],
+        capture_output=True, text=True, timeout=30,
+        env={**os.environ, "SQLALCHEMY_URL": SYNC_DB_URL},
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"alembic upgrade failed: {result.stderr}")
 
 
 @pytest.fixture(scope="session")
@@ -36,14 +50,13 @@ def event_loop():
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Provide a test database session that rolls back after each test."""
+    """Provide a test database session that uses alembic migrations.
+    Rolls back after each test to keep DB clean.
+    """
+    # Ensure tables exist via alembic (idempotent if already migrated)
+    _run_alembic_upgrade()
+
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-
-    # Run migrations to ensure schema exists
-    from app.core.database import Base
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session() as session:
@@ -56,11 +69,14 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 @pytest_asyncio.fixture(scope="function")
 async def test_app():
-    """Provide a FastAPI test app with database."""
+    """Provide a FastAPI test app with database.
+    Ensures alembic migration has run before yielding app.
+    """
+    _run_alembic_upgrade()
+
     from app.main import app
     from app.core.database import get_db
 
-    # Override the database dependency for tests - use Docker hostname
     test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
     test_session_factory = async_sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
@@ -89,16 +105,3 @@ async def async_client(test_app) -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=test_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
-
-
-@pytest.fixture
-def sample_project_data():
-    """Sample project data for tests."""
-    return {
-        "domain": "test-example.com",
-        "target_country": "DE",
-        "target_language": "de",
-        "target_cities": ["Köln", "Bonn"],
-        "services": ["App Entwicklung", "Flutter Entwicklung"],
-        "competitors": ["competitor-test.de"],
-    }
