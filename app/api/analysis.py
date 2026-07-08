@@ -272,6 +272,7 @@ async def list_seo_tasks(
             {
                 "id": t.id,
                 "title": t.title,
+                "description": t.description,
                 "reason": t.reason,
                 "category": t.category,
                 "priority": t.priority,

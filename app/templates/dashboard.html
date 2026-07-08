@@ -63,6 +63,19 @@
   .flex { display: flex; gap: 10px; }
   .flex-end { justify-content: flex-end; }
   .mt { margin-top: 12px; }
+  .task-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; cursor: pointer; transition: .2s; }
+  .task-card:hover { border-color: var(--accent); }
+  .task-card .card-header { padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .task-card .card-header .title { font-weight: 600; flex: 1; }
+  .task-card .card-header .meta { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+  .task-card .card-body { display: none; padding: 0 18px 16px 18px; border-top: 1px solid var(--border); }
+  .task-card.open .card-body { display: block; }
+  .task-card.open { border-color: var(--accent); }
+  .task-card .card-body .section-label { font-size: 11px; text-transform: uppercase; color: var(--accent); margin: 12px 0 4px 0; letter-spacing: 1px; }
+  .task-card .card-body .section-text { color: var(--text2); font-size: 13px; line-height: 1.6; }
+  .task-card .card-body ul.checklist { list-style: none; padding: 0; }
+  .task-card .card-body ul.checklist li { padding: 6px 0; font-size: 13px; color: var(--text2); display: flex; align-items: flex-start; gap: 8px; }
+  .task-card .card-body ul.checklist li::before { content: '☐'; color: var(--accent); font-size: 15px; }
 </style>
 </head>
 <body>
@@ -214,19 +227,31 @@ async function loadTasks() {
 
   allTasks.sort((a,b) => b.priority_score - a.priority_score);
 
-  main.innerHTML = `<div class="header"><h2>✅ Tasks</h2><span style="color:var(--text2)">${allTasks.length} total</span></div>`;
+  main.innerHTML = `<div class="header"><h2>✅ Tasks</h2><span style="color:var(--text2)">${allTasks.length} total — click to expand</span></div>`;
 
   if (!allTasks.length) { main.innerHTML += '<div class="section"><div class="empty">No tasks yet. Run a pipeline to generate tasks.</div></div>'; return; }
 
-  main.innerHTML += `<div class="section"><table><tr><th>Task</th><th>Project</th><th>Category</th><th>Priority</th><th>Score</th></tr>
-    ${allTasks.map(t => `<tr>
-      <td>${t.title}</td>
-      <td>${t.project_domain}</td>
-      <td>${t.category}</td>
-      <td><span class="badge ${t.priority}">${t.priority}</span></td>
-      <td>${t.priority_score}</td>
-    </tr>`).join('')}
-  </table></div>`;
+  const escHtml = s => String(s||'').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>');
+
+  main.innerHTML += `<div class="section">${allTasks.map((t,i) => `
+    <div class="task-card" id="task-${i}" onclick="document.getElementById('task-${i}').classList.toggle('open')">
+      <div class="card-header">
+        <span class="title">${escHtml(t.title)}</span>
+        <div class="meta">
+          <span style="font-size:11px;color:var(--text2)">${escHtml(t.project_domain)}</span>
+          <span class="badge ${t.category||'content'}">${t.category||'content'}</span>
+          <span class="badge ${t.priority}">${t.priority}</span>
+          <span style="font-weight:700;color:var(--accent)">${t.priority_score}</span>
+        </div>
+      </div>
+      <div class="card-body">
+        ${t.description ? `<div class="section-label">Description</div><div class="section-text">${escHtml(t.description)}</div>` : ''}
+        ${t.reason ? `<div class="section-label">Reason</div><div class="section-text">${escHtml(t.reason)}</div>` : ''}
+        ${t.expected_impact ? `<div class="section-label">Expected Impact</div><div class="section-text">${escHtml(t.expected_impact)}</div>` : ''}
+        ${t.checklist && t.checklist.length ? `<div class="section-label">Checklist</div><ul class="checklist">${t.checklist.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>` : ''}
+      </div>
+    </div>
+  `).join('')}</div>`;
 }
 
 // --- Reports ---

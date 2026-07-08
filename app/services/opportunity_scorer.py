@@ -196,8 +196,12 @@ class OpportunityScorer:
     def _build_cluster_task(
         self, cluster, action: str, details: dict, primary_kw: str, size: int, intent: str
     ) -> Optional[dict]:
-        """Build a task dict from cluster + action decision."""
+        """Build a detailed, actionable task dict from cluster + action decision."""
         core_topic = self._extract_core_topic(cluster.name or primary_kw)
+        kw_list = cluster.keywords_list or []
+        kw_preview = ", ".join(kw_list[:8]) if kw_list else primary_kw
+        intent_label = {"local_transactional": "local buyer", "commercial": "buying intent", "problem_solution": "problem solver", "informational": "research"}.get(intent, intent)
+
         base = {
             "keyword_cluster_id": cluster.id,
             "intent": intent,
@@ -207,19 +211,35 @@ class OpportunityScorer:
         }
 
         if action == "create_page":
+            structure = self._suggest_content_structure(core_topic, kw_list, intent)
             base.update({
                 "title": f"Create page: {core_topic}",
-                "description": f"New dedicated page for '{core_topic}' targeting {size} related keywords.",
-                "reason": f"No existing page covers this topic cluster ({size} keywords, {intent} intent)",
+                "description": (
+                    f"Create a new dedicated page about '{core_topic}' to capture search traffic "
+                    f"from {size} keyword variants ({intent_label} intent). "
+                    f"Currently no page on the site targets these keywords, leaving traffic on the table. "
+                    f"Target keywords include: {kw_preview}."
+                ),
+                "reason": (
+                    f"No existing page covers this {intent_label} topic cluster. "
+                    f"{size} related keywords have no dedicated landing page, "
+                    f"meaning potential customers searching for '{primary_kw}' find nothing."
+                ),
                 "category": "content",
                 "checklist": [
-                    f"Write 800+ word content optimized for '{primary_kw}'",
-                    "Include H2 sub-sections for each keyword variant",
-                    "Add 5+ FAQ entries",
-                    "Add internal links from homepage and service pages",
-                    "Include local references (city, region) naturally",
+                    f"Create page with URL slug based on '{primary_kw[:60]}'",
+                    f"Write 800-1200 word content covering: {kw_preview}",
+                ] + structure + [
+                    "Add 5-7 FAQ entries addressing common customer questions",
+                    "Add 2-3 internal links from homepage and related service pages",
+                    "Include a clear call-to-action (contact form, phone, or booking)",
+                    "Add location references if the service is geo-targeted",
                 ],
-                "expected_impact": f"Capture search traffic for {size} related keywords — estimate 50-200 monthly visits",
+                "expected_impact": (
+                    f"Capture search traffic for {size} keyword variants — "
+                    f"estimated 30-150 monthly organic visits once ranking. "
+                    f"Fills a clear content gap vs competitors."
+                ),
                 "business_value": 9 if intent in ("local_transactional", "commercial") else 7,
                 "action_type": "create",
             })
@@ -227,21 +247,36 @@ class OpportunityScorer:
 
         elif action == "improve_page":
             page = details.get("page")
-            page_title = page.title[:60] if page and page.title else core_topic
+            page_title = (page.title or core_topic)[:70] if page else core_topic
+            page_url = getattr(page, "url", "") if page else ""
             base.update({
                 "page_id": getattr(page, "id", None),
                 "title": f"Improve: {page_title}",
-                "description": f"Optimize existing page for cluster '{core_topic}' ({size} keywords).",
-                "reason": f"Existing page can be improved for {size} keywords in this cluster",
+                "description": (
+                    f"Optimize the existing page '{page_title}' "
+                    f"({page_url}) to better target the keyword cluster '{core_topic}'. "
+                    f"This page already exists but is not fully optimized for {size} related keywords: {kw_preview}. "
+                    f"Improving it is faster than creating a new page and can yield quick ranking gains."
+                ),
+                "reason": (
+                    f"Existing page '{page_title}' partially matches this cluster "
+                    f"but misses optimization for {size} keyword variants. "
+                    f"On-page improvements typically show results in 2-4 weeks."
+                ),
                 "category": "on_page",
                 "checklist": [
-                    f"Update title tag to include '{primary_kw}'",
-                    "Rewrite meta description with primary keyword",
-                    "Add missing H2 sub-sections for keyword variants",
-                    "Improve internal linking from related pages",
-                    "Add/refresh FAQ section",
+                    f"Update <title> tag to include '{primary_kw}' naturally",
+                    f"Rewrite meta description (150-160 chars) using '{primary_kw}' and a value proposition",
+                    f"Add or improve H2 subheadings covering: {kw_preview}",
+                    f"Expand thin sections — add 200-400 words where content is sparse",
+                    "Add 3-5 internal links FROM other relevant pages TO this page",
+                    "Ensure images have descriptive alt text with target keywords",
+                    "Add FAQ section with schema markup if not present",
                 ],
-                "expected_impact": f"Better rankings for {size} keywords with minimal effort",
+                "expected_impact": (
+                    f"Improve rankings for {size} keywords within 2-4 weeks. "
+                    f"On-page optimization typically yields 10-30% traffic increase for existing pages."
+                ),
                 "business_value": 8,
                 "action_type": "improve",
             })
@@ -250,15 +285,28 @@ class OpportunityScorer:
         elif action == "add_section":
             base.update({
                 "title": f"Add section: {core_topic}",
-                "description": f"Add a dedicated section about '{core_topic}' to an existing page.",
-                "reason": f"Small cluster ({size} keywords) — add as section instead of full page",
+                "description": (
+                    f"Instead of a full page, add a dedicated H2 section about '{core_topic}' "
+                    f"to the most relevant existing service page. This cluster has {size} keywords "
+                    f"({intent_label} intent) which don't justify a standalone page but deserve coverage. "
+                    f"Keywords: {kw_preview}."
+                ),
+                "reason": (
+                    f"Small cluster ({size} keywords) — adding a section to an existing page "
+                    f"is more efficient than creating a full page. Still captures the keyword traffic."
+                ),
                 "category": "content",
                 "checklist": [
-                    f"Add H2 section '{core_topic}' to the most relevant service page",
-                    f"Include 2-3 paragraphs targeting '{primary_kw}'",
-                    "Link from homepage or navigation if valuable",
+                    f"Identify the best parent page for this topic (most relevant service page)",
+                    f"Add H2 heading: '{core_topic}'",
+                    f"Write 2-3 paragraphs (200-400 words) targeting: {kw_preview}",
+                    "Include 2-3 FAQ items in this section",
+                    "Link this section from the page's table of contents if applicable",
                 ],
-                "expected_impact": f"Incremental coverage for {size} keyword variants",
+                "expected_impact": (
+                    f"Cover {size} keyword variants with minimal effort. "
+                    f"Estimated 10-40 additional monthly visits."
+                ),
                 "business_value": 5,
                 "action_type": "section",
             })
@@ -267,24 +315,83 @@ class OpportunityScorer:
         elif action == "add_faq":
             faq_topic = details.get("faq_topic", core_topic)
             page = details.get("page")
+            questions = self._generate_faq_questions(faq_topic, kw_list)
             base.update({
                 "page_id": getattr(page, "id", None) if page else None,
                 "title": f"Add FAQ: {faq_topic}",
-                "description": f"Add FAQ entries answering common questions about '{faq_topic}'.",
-                "reason": "Question-based keywords detected — best served by FAQ content",
+                "description": (
+                    f"Add a Frequently Asked Questions section about '{faq_topic}' "
+                    f"to capture question-based search traffic. These {size} keywords "
+                    f"are question-format queries that perform best as FAQ content. "
+                    f"Suggested questions: {'; '.join(questions[:5])}."
+                ),
+                "reason": (
+                    f"Question-based keywords detected in this cluster — "
+                    f"FAQ content is the best format for ranking for these queries "
+                    f"and can win featured snippets."
+                ),
                 "category": "content",
                 "checklist": [
-                    f"Write 5+ question/answer pairs about '{faq_topic}'",
-                    "Use question-based H2 or H3 headings",
-                    "Add FAQ schema markup",
+                    f"Add FAQ section with H2 'Frequently Asked Questions'",
+                ] + [f"Q: {q}\nA: [Write 2-4 sentence answer]" for q in questions[:5]] + [
+                    "Add JSON-LD FAQ schema markup for rich results",
+                    "Link to the FAQ section from relevant service pages",
                 ],
-                "expected_impact": "Capture featured snippets and 'People Also Ask' traffic",
+                "expected_impact": (
+                    "Potential to capture featured snippets and 'People Also Ask' results. "
+                    "FAQ content often achieves higher CTR in search results."
+                ),
                 "business_value": 6,
                 "action_type": "faq",
             })
             return base
 
         return None
+
+    def _suggest_content_structure(self, topic: str, keywords: list, intent: str) -> list:
+        """Suggest H2 section structure based on topic and intent."""
+        sections = []
+        if intent in ("local_transactional", "commercial"):
+            sections = [
+                f"H2: What is {topic} — brief overview",
+                f"H2: Our {topic} services / approach",
+                f"H2: Pricing & packages for {topic}",
+                f"H2: Why choose us for {topic}",
+            ]
+        elif intent == "problem_solution":
+            sections = [
+                f"H2: Common problems with {topic}",
+                f"H2: How we solve {topic} challenges",
+                f"H2: Case study / example",
+            ]
+        else:
+            sections = [
+                f"H2: What is {topic}",
+                f"H2: Key aspects of {topic}",
+                f"H2: FAQ about {topic}",
+            ]
+        return sections
+
+    def _generate_faq_questions(self, topic: str, keywords: list) -> list:
+        """Generate relevant FAQ questions from keywords and topic."""
+        questions = []
+        for kw in keywords[:6]:
+            kw_clean = kw.strip().rstrip("?")
+            if not kw_clean:
+                continue
+            if any(kw_clean.lower().startswith(q) for q in ("was ", "wie ", "warum ", "welche ", "what ", "how ", "why ", "when ", "where ")):
+                questions.append(kw_clean[:100] + "?")
+            elif "kosten" in kw_clean.lower() or "preis" in kw_clean.lower() or "price" in kw_clean.lower() or "cost" in kw_clean.lower():
+                questions.append(f"What does {kw_clean} cost?")
+        if len(questions) < 3:
+            questions = [
+                f"What is {topic}?",
+                f"How does {topic} work?",
+                f"What are the benefits of {topic}?",
+                f"How much does {topic} cost?",
+                f"How long does {topic} take?",
+            ]
+        return questions[:6]
 
     # ------------------------------------------------------------------
     # Content gap tasks
@@ -301,14 +408,31 @@ class OpportunityScorer:
         tasks = []
         for gap in gaps:
             sev = gap.severity
+            sev_label = {"high": "Critical gap", "medium": "Important gap", "low": "Minor gap"}.get(sev, "Gap")
+            fix = gap.suggested_fix or f"Add content covering: {gap.description}"
             tasks.append({
                 "page_id": gap.page_id,
                 "title": f"Fix gap: {gap.description[:80]}",
-                "description": gap.description,
-                "reason": f"Missing topic: {gap.gap_type} (severity: {sev})",
+                "description": (
+                    f"{sev_label}: {gap.description}. "
+                    f"This topic is present on competitor sites but missing from yours, "
+                    f"weakening your topical authority for '{gap.gap_type}'."
+                ),
+                "reason": (
+                    f"Content gap detected — competitors cover '{gap.gap_type}' "
+                    f"but your site does not. Severity: {sev}. "
+                    f"Filling this gap improves topical completeness and search rankings."
+                ),
                 "category": "content",
-                "checklist": [gap.suggested_fix] if gap.suggested_fix else [f"Add content covering: {gap.description}"],
-                "expected_impact": "Fill content gap — improve topical authority",
+                "checklist": [
+                    fix,
+                    "Review top 3 competitor pages for this topic to understand expected coverage",
+                    "Add internal links from this new content to related pages",
+                ],
+                "expected_impact": (
+                    "Improves topical authority and completeness. "
+                    "Filling content gaps typically improves rankings for related keywords within 2-6 weeks."
+                ),
                 "business_value": 8 if sev == "high" else 5 if sev == "medium" else 3,
                 "action_type": "gap",
                 "gap_severity": sev,
